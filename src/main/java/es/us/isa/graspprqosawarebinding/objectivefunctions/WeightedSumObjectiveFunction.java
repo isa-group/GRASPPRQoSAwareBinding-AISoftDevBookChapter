@@ -40,5 +40,9 @@ public class WeightedSumObjectiveFunction implements ObjectiveFunction{
 	public UtilityFunction<Double> getUtiltyFunction(QoSProperty q){
 		return utilityFunctions.get(q);
 	}
+	
+	public Map<QoSProperty, Double> getWeights() {
+		return weights;
+	}
 
 }

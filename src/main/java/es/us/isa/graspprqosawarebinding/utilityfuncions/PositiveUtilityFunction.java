@@ -1,16 +1,12 @@
 package es.us.isa.graspprqosawarebinding.utilityfuncions;
 
-public class PositiveUtilityFunction implements UtilityFunction<Double>{
+public class PositiveUtilityFunction extends BoundedUtilityFunction<Double>{
 
-	double min;
-	double max;
-
+	
 	
 
 	public PositiveUtilityFunction(double min, double max) {
-		super();
-		this.min = min;
-		this.max = max;
+		super(min,max);		
 	}
 
 
@@ -18,6 +14,11 @@ public class PositiveUtilityFunction implements UtilityFunction<Double>{
 	public Double getUtility(Double value) {
 		return (value-min)/(max-min);
 	}
-
 	
+	public Object clone() throws CloneNotSupportedException
+    {
+		return new PositiveUtilityFunction(min, max);		
+    }
+
+			
 }

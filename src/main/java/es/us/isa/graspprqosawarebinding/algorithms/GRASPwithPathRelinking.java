@@ -1,17 +1,20 @@
 package es.us.isa.graspprqosawarebinding.algorithms;
 
+import java.util.Map;
 import java.util.Random;
 
 import es.us.isa.graspprqosawarebinding.Binding;
+import es.us.isa.graspprqosawarebinding.QoSProperty;
 import es.us.isa.graspprqosawarebinding.problem.QoSAwareBindingProblem;
 
 public class GRASPwithPathRelinking extends GRASP {
 
 	int maxPRIterations;
 	PathRelinking pr;
-	public GRASPwithPathRelinking(int maxGRASPIterations, double alpha, Random random, int maxNeighboursExplored, int maxPRIterations) {
+	public GRASPwithPathRelinking(int maxGRASPIterations, double alpha, int maxNeighboursExplored, int maxPRIterations, Map<QoSProperty, Double> globalMin,
+			Map<QoSProperty, Double> globalMax, Random random) {
 		super(maxGRASPIterations, alpha, random);		
-		pr=new PathRelinking(null,maxNeighboursExplored,random);
+		pr=new PathRelinking(null,maxNeighboursExplored, globalMin, globalMax, random);
 	}
 
 	public Binding solve(QoSAwareBindingProblem p) {

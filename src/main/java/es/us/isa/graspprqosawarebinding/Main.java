@@ -1,6 +1,7 @@
 package es.us.isa.graspprqosawarebinding;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -10,10 +11,12 @@ import java.util.Set;
 
 import es.us.isa.graspprqosawarebinding.QoSProperty.QoSPropertyType;
 import es.us.isa.graspprqosawarebinding.algorithms.GRASPwithPathRelinking;
+import es.us.isa.graspprqosawarebinding.objectivefunctions.ConstrainedObjectiveFunction;
 import es.us.isa.graspprqosawarebinding.objectivefunctions.ObjectiveFunction;
 import es.us.isa.graspprqosawarebinding.objectivefunctions.WeightedSumObjectiveFunction;
 import es.us.isa.graspprqosawarebinding.problem.Constraint;
 import es.us.isa.graspprqosawarebinding.problem.QoSAwareBindingProblem;
+import es.us.isa.graspprqosawarebinding.problem.SimpleConstraint;
 import es.us.isa.graspprqosawarebinding.utilityfuncions.NegativeUtilityFunction;
 import es.us.isa.graspprqosawarebinding.utilityfuncions.PositiveUtilityFunction;
 import es.us.isa.graspprqosawarebinding.utilityfuncions.UtilityFunction;
@@ -28,13 +31,16 @@ public class Main {
 	
 	QoSProperty storage;
 	
-	Map<QoSProperty,Double> max;
-	Map<QoSProperty,Double> min;
-	
+	Map<QoSProperty,Double> bindingMax;
+	Map<QoSProperty,Double> bindingMin;
+	Map<QoSProperty, Double> globalMin;
+	Map<QoSProperty, Double> globalMax;
+
 	Task cloudStorageService;
 	Task paymentAndBillingService;
 	Task notificationService;
-	
+
+		
 	public static void main(String[] params) {
 		Main main=new Main();
 		main.run();
@@ -43,24 +49,27 @@ public class Main {
 	private void run() {
 		Random random=new Random();
 		QoSAwareBindingProblem problem=buildSampleProblem();
-		GRASPwithPathRelinking graspWithPR=new GRASPwithPathRelinking(10,0.2,new Random(), 2,3);
+		GRASPwithPathRelinking graspWithPR=new GRASPwithPathRelinking(10,0.2, 2,3, globalMin,globalMax, new Random());
 		Binding optimalSolution=graspWithPR.solve(problem);
-		System.out.println(optimalSolution);		
+		System.out.println(optimalSolution +":"+problem.getObjectiveFunction().evaluate(optimalSolution));		
 	}
 
-	private QoSAwareBindingProblem buildSampleProblem() {
+	public QoSAwareBindingProblem buildSampleProblem() {
 		Set<QoSProperty> qoSProperties=buildQoSProperties();
 		Application application=buildApplication();
 		Map<Task,Set<Plan>> market=buildMarket(qoSProperties);
 		ObjectiveFunction objFunc=buildObjectiveFunction(qoSProperties);
-		List<Constraint> constraints=buildConstraints();
-		
-		QoSAwareBindingProblem problem=new QoSAwareBindingProblem(application, market, constraints, objFunc,new ArrayList<QoSProperty>(qoSProperties),random);
+		QoSAwareBindingProblem problem=new QoSAwareBindingProblem(application, market, Collections.EMPTY_LIST, objFunc,new ArrayList<QoSProperty>(qoSProperties),random);
+		List<Constraint> constraints=buildConstraints(problem);
+		problem.setConstraints(constraints);
+		problem.setObjectiveFunction(new ConstrainedObjectiveFunction(0.6,problem.getObjectiveFunction(),problem));
 		return problem;
 	}
 
-	private List<Constraint> buildConstraints() {
+	private List<Constraint> buildConstraints(QoSAwareBindingProblem problem) {
 		List<Constraint> c=new ArrayList<Constraint>();
+		SimpleConstraint sc=new SimpleConstraint(problem, storage, 20.0, SimpleConstraint.Operator.GREATER_OR_EQUAL);
+		c.add(sc);
 		return c;
 	}
 
@@ -69,13 +78,36 @@ public class Main {
 		result.put(cloudStorageService, buildStorageMarket());
 		result.put(paymentAndBillingService, buildPaymentAndBillingMarket());
 		result.put(notificationService, buildNotificationMarket());
-		computeMaxAndMins(result);
+		computeBindingMaxAndMins(result);
+		computeGlobalMaxAndMins(result);
 		return result;
 	}
 
-	private void computeMaxAndMins(HashMap<Task, Set<Plan>> result) {
-		max=new HashMap<QoSProperty, Double>();
-		min=new HashMap<QoSProperty, Double>();
+	private void computeGlobalMaxAndMins(HashMap<Task, Set<Plan>> result) {
+		globalMax=new HashMap<QoSProperty, Double>();
+		globalMin=new HashMap<QoSProperty, Double>();
+		QoSProperty[] props= {cost,availability,storage};
+		double minValue;
+		double maxValue;
+		for(QoSProperty q:props) {
+			minValue=Double.MAX_VALUE;
+			maxValue=Double.MIN_VALUE;
+			for(Task t:result.keySet()) {				
+				for(Plan p:result.get(t)) {
+					if(p.getQoSValue(q)>maxValue) 
+						maxValue=p.getQoSValue(q);											
+					if(p.getQoSValue(q)<minValue)
+						minValue=p.getQoSValue(q);
+				}				
+			}
+			globalMin.put(q, minValue);
+			globalMax.put(q, maxValue);
+		}		
+	}
+
+	public void computeBindingMaxAndMins(HashMap<Task, Set<Plan>> result) {
+		bindingMax=new HashMap<QoSProperty, Double>();
+		bindingMin=new HashMap<QoSProperty, Double>();
 		QoSProperty[] props= {cost,availability,storage};
 		double minValue;
 		double maxValue;
@@ -89,16 +121,20 @@ public class Main {
 					if(p.getQoSValue(q)<minValue)
 						minValue=p.getQoSValue(q);
 				}
-				if(min.get(q)==null)
-					min.put(q, minValue);
-				else if(minValue<min.get(q))
-					min.put(q, minValue);
-				if(max.get(q)==null)
-					max.put(q, maxValue);
+				if(bindingMin.get(q)==null)
+					bindingMin.put(q, minValue);
+				else 
+					bindingMin.put(q, minValue+bindingMin.get(q));
+				if(bindingMax.get(q)==null)
+					bindingMax.put(q, maxValue);
 				else
-					max.put(q, maxValue+max.get(q));
+					bindingMax.put(q, maxValue+bindingMax.get(q));
 			}			
 		}		
+	}
+	
+	public void computeLocalMaxAndMins(HashMap<Task, Set<Plan>> result) {
+	
 	}
 
 	private Set<Plan> buildNotificationMarket() {
@@ -237,14 +273,41 @@ public class Main {
 		weights.put(storage, 0.2);
 		
 		Map<QoSProperty,UtilityFunction<Double>> utilities=new HashMap<QoSProperty, UtilityFunction<Double>>();
-		utilities.put(cost, new NegativeUtilityFunction(min.get(cost), max.get(cost)));
-		utilities.put(availability, new PositiveUtilityFunction(min.get(availability), max.get(availability)));
-		utilities.put(storage, new PositiveUtilityFunction(min.get(storage), max.get(storage)));
+		utilities.put(cost, new NegativeUtilityFunction(bindingMin.get(cost), bindingMax.get(cost)));
+		utilities.put(availability, new PositiveUtilityFunction(bindingMin.get(availability), bindingMax.get(availability)));
+		utilities.put(storage, new PositiveUtilityFunction(bindingMin.get(storage), bindingMax.get(storage)));
 		
 		result=new WeightedSumObjectiveFunction(weights, utilities);
 		
 		return  result;
 	}
 	
+	public Map<QoSProperty, Double> getBindingMin() {
+		return bindingMin;
+	}
+	
+	public Map<QoSProperty, Double> getBindingMax() {
+		return bindingMax;
+	}
+	
+	public Map<QoSProperty, Double> getGlobalMin(){
+		return globalMin;
+	}
+	
+	public Map<QoSProperty, Double> getGlobalMax() {
+		return globalMax;
+	}
+	
+	public QoSProperty getCost() {
+		return cost;
+	}
+	
+	public QoSProperty getStorage() {
+		return storage;
+	}
+	
+	public QoSProperty getAvailability() {
+		return availability;
+	}
 	
 }

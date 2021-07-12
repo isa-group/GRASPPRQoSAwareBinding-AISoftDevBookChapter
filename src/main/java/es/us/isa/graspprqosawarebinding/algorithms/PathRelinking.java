@@ -1,12 +1,19 @@
 package es.us.isa.graspprqosawarebinding.algorithms;
 
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 
 import es.us.isa.graspprqosawarebinding.Binding;
 import es.us.isa.graspprqosawarebinding.Plan;
+import es.us.isa.graspprqosawarebinding.QoSProperty;
 import es.us.isa.graspprqosawarebinding.Task;
+import es.us.isa.graspprqosawarebinding.objectivefunctions.ObjectiveFunction;
+import es.us.isa.graspprqosawarebinding.objectivefunctions.WeightedSumObjectiveFunction;
 import es.us.isa.graspprqosawarebinding.problem.QoSAwareBindingProblem;
+import es.us.isa.graspprqosawarebinding.utilityfuncions.BoundedUtilityFunction;
+import es.us.isa.graspprqosawarebinding.utilityfuncions.UtilityFunction;
 
 public class PathRelinking implements OptimizationAlgorithm {
 
@@ -16,11 +23,16 @@ public class PathRelinking implements OptimizationAlgorithm {
 	Random random;
 	Binding initialSolution;
 	Binding guidingSolution;
+	ObjectiveFunction func;
+	Map<QoSProperty, Double> globalMin;
+	Map<QoSProperty, Double> globalMax;
 
-	public PathRelinking(Set<Binding> eliteSolutions, int maxNeighbours, Random random) {
+	public PathRelinking(Set<Binding> eliteSolutions, int maxNeighbours,Map<QoSProperty, Double> globalMin,	Map<QoSProperty, Double> globalMax, Random random) {
 		this.maxNeighbours = maxNeighbours;
 		this.eliteSolutions = eliteSolutions;
 		this.random = random;
+		this.globalMin = globalMin;
+		this.globalMax = globalMax; 
 	}
 	
 	public Binding getGuidingSolution() {
@@ -46,16 +58,31 @@ public class PathRelinking implements OptimizationAlgorithm {
 			guidingSolution = getRandomElement(eliteSolutions);
 
 		neighboursVisited = 0;
+		if(func==null) {
+			Map<QoSProperty,UtilityFunction<Double>> utilityFunctions=new HashMap<QoSProperty, UtilityFunction<Double>>();
+			WeightedSumObjectiveFunction of=(WeightedSumObjectiveFunction)p.getObjectiveFunction();
+			BoundedUtilityFunction<Double> uFunc=null;
+			for(QoSProperty q:p.getQualityProperties()) {
+				try {
+					uFunc=(BoundedUtilityFunction<Double>)((BoundedUtilityFunction<Double>) of.getUtiltyFunction(q)).clone();
+				} catch (CloneNotSupportedException e) {					
+					e.printStackTrace();
+				}
+				uFunc.setMin(globalMin.get(q));
+				uFunc.setMax(globalMax.get(q));
+			}
+			func=new WeightedSumObjectiveFunction(of.getWeights(),
+													utilityFunctions);
+		}
 
-		Binding optimalSolution = p.getObjectiveFunction().evaluate(initialSolution) > p.getObjectiveFunction()
-				.evaluate(guidingSolution) ? initialSolution : guidingSolution;
+		Binding optimalSolution = func.evaluate(initialSolution) > func.evaluate(guidingSolution) 
+									? initialSolution : guidingSolution;
 		Binding currentSolution = new Binding(initialSolution);
 		while (!currentSolution.equals(guidingSolution) && neighboursVisited < maxNeighbours) {
 			for (Task t : p.getApplication().getTasks()) {
 				if (!currentSolution.getProvider(t).equals(guidingSolution.getProvider(t))) {
 					currentSolution.setProvider(t, guidingSolution.getProvider(t));
-					if (p.getObjectiveFunction().evaluate(initialSolution) > p.getObjectiveFunction()
-							.evaluate(guidingSolution))
+					if (func.evaluate(initialSolution) > func.evaluate(guidingSolution))
 						optimalSolution = currentSolution;
 				}
 			}

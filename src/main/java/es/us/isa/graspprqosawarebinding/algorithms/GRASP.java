@@ -126,7 +126,24 @@ public class GRASP implements OptimizationAlgorithm {
 	}	
 	
 	protected Binding improveSoluton(Binding base,QoSAwareBindingProblem p) {
-		return base;
+		Binding result=new Binding(base);
+		Binding candidate;
+		Double optimalValue=p.getObjectiveFunction().evaluate(base);
+		Double candidateValue=null;
+		for(Task t:p.getMarket().keySet()) {
+			for(Plan plan:p.getMarket().get(t)) {
+				if(base.getProvider(t)!=plan) {
+					candidate=new Binding(base);
+					candidate.setProvider(t, plan);
+					candidateValue=p.getObjectiveFunction().evaluate(candidate);
+					if(candidateValue>optimalValue) {
+						optimalValue=candidateValue;
+						result=candidate;
+					}
+				}
+			}
+		}
+		return result;
 	}
 
 	
